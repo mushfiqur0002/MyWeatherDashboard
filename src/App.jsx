@@ -3,28 +3,72 @@ import { useState } from 'react'
 function App() {
   const [city, setCity] = useState('')
   const [weatherData, setWeatherData] = useState(null)
+  const [forecastData, setForecastData] = useState(null)
   const [error, setError] = useState(null)
 
   const API_KEY = import.meta.env.VITE_OPENWEATHER_API_KEY
   
   const fetchWeatherData = async () => {
     try {
-      const response = await fetch(
+      // Fetch current weather
+      const weatherResponse = await fetch(
         `https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${API_KEY}&units=metric`
       )
-      const data = await response.json()
+      const weatherData = await weatherResponse.json()
       
-      if (response.ok) {
-        setWeatherData(data)
+      if (weatherResponse.ok) {
+        setWeatherData(weatherData)
+        
+        // Fetch 5-day forecast
+        const forecastResponse = await fetch(
+          `https://api.openweathermap.org/data/2.5/forecast?q=${city}&appid=${API_KEY}&units=metric`
+        )
+        const forecastData = await forecastResponse.json()
+        
+        if (forecastResponse.ok) {
+          // Process forecast data to get daily forecasts
+          const dailyForecasts = processForecastData(forecastData.list)
+          setForecastData(dailyForecasts)
+        }
+        
         setError(null)
       } else {
-        setError(data.message)
+        setError(weatherData.message)
         setWeatherData(null)
+        setForecastData(null)
       }
     } catch (err) {
       setError('Failed to fetch weather data')
       setWeatherData(null)
+      setForecastData(null)
     }
+  }
+
+  const processForecastData = (forecastList) => {
+    const dailyData = {}
+    
+    forecastList.forEach(item => {
+      const date = new Date(item.dt * 1000).toDateString()
+      
+      if (!dailyData[date]) {
+        dailyData[date] = {
+          date: date,
+          temp_min: item.main.temp_min,
+          temp_max: item.main.temp_max,
+          description: item.weather[0].description,
+          icon: item.weather[0].icon,
+          humidity: item.main.humidity,
+          wind_speed: item.wind.speed
+        }
+      } else {
+        // Update min/max temperatures
+        dailyData[date].temp_min = Math.min(dailyData[date].temp_min, item.main.temp_min)
+        dailyData[date].temp_max = Math.max(dailyData[date].temp_max, item.main.temp_max)
+      }
+    })
+    
+    // Return first 5 days
+    return Object.values(dailyData).slice(0, 5)
   }
 
   const handleSubmit = (e) => {
@@ -79,6 +123,45 @@ function App() {
                           <p className="font-semibold">{weatherData.wind.speed} m/s</p>
                         </div>
                       </div>
+                    </div>
+                  </div>
+                )}
+
+                {forecastData && (
+                  <div className="mt-8">
+                    <h3 className="text-xl font-semibold mb-4">5-Day Forecast</h3>
+                    <div className="space-y-3">
+                      {forecastData.map((day, index) => (
+                        <div key={index} className="bg-gray-50 rounded-lg p-4">
+                          <div className="flex justify-between items-center">
+                            <div className="flex-1">
+                              <p className="font-medium text-gray-900">
+                                {new Date(day.date).toLocaleDateString('en-US', { 
+                                  weekday: 'short', 
+                                  month: 'short', 
+                                  day: 'numeric' 
+                                })}
+                              </p>
+                              <p className="text-sm text-gray-600 capitalize">{day.description}</p>
+                            </div>
+                            <div className="flex items-center space-x-4">
+                              <img 
+                                src={`https://openweathermap.org/img/wn/${day.icon}@2x.png`}
+                                alt={day.description}
+                                className="w-12 h-12"
+                              />
+                              <div className="text-right">
+                                <p className="font-bold text-lg">
+                                  {Math.round(day.temp_max)}°/{Math.round(day.temp_min)}°
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  {Math.round(day.humidity)}% • {Math.round(day.wind_speed)}m/s
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
